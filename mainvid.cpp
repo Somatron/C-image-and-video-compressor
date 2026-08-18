@@ -9,8 +9,8 @@ extern "C" { //import C functions since C++ supports function overloading and C 
 void video_compress(const char* input_file, const char* output_file) {
   //format video
   //AVFormat is a struct btw, structs group variables together, AVFormat handles pointers for input/output, filenames, streams (audio, subtitles, etc), and bit rates
-  *AVFormatContext inputFormatContext = nullptr; //point to nothing
-  *AVFormatContext outputFormatContext = nullptr;
+  AVFormatContext* inputFormatContext = nullptr; //point to nothing
+  AVFormatContext* outputFormatContext = nullptr;
 
   //open input video file, with inputFormatcontext, and input_file being our URL
   avformat_open_input(&inputFormatContext, input_file, nullptr, nullptr); //what happens to our inputFormatContext in the avformat_open_input function impacts our variable here too
@@ -37,7 +37,7 @@ void video_compress(const char* input_file, const char* output_file) {
     std::cerr << "ERROR encoder is not found" << std::endl; 
   }
   AVStream *output_stream = avformat_new_stream(outputFormatContext, codec); //output our new video stream under the H.264 format since its a better more universally used compression method than H.265
-  AVCodecContext *codec_context = avcodec_alloc_context3(codec)
+  AVCodecContext *codec_context = avcodec_alloc_context3(codec);
   if (!codec_context) {
     std::cerr << "ERROR cannot allocate memory for encoding/decoding media streams" << std::endl; 
   }
@@ -50,7 +50,7 @@ void video_compress(const char* input_file, const char* output_file) {
   codec_context -> bitrate = 1000000; //lower target bitrate
 
   //set encoding speed/compression trade-off profile
-  av_opt_set(codec_ctx->priv_data, "preset", "slow", 0);
+  av_opt_set(codec_context->priv_data, "preset", "slow", 0);
   if (avcodec_open2(codec_context, codec, NULL) < 0) {
     std::cerr << "ERROR cannot open video format" << std::endl; 
     return;
