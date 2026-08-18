@@ -3,8 +3,12 @@ extern "C" { //import C functions since C++ supports function overloading and C 
 #include <ffmpeg-9.0.1/libavcodec/avcodec.h>
 #include <ffmpeg-9.0.1/libavformat/avformat.h>
 #include <ffmpeg-9.0.1/libavutil/imgutils.h>
+#include <ffmpeg-9.0.1/libavutil/opt.h>
 }
 #include <iostream>
+
+
+#include "httplib.h" //add the html to run c++
 
 void video_compress(const char* input_file, const char* output_file) {
   //format video
