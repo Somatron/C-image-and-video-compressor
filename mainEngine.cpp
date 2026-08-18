@@ -1,10 +1,10 @@
 //GRAB VIDEO LIBRARIES
 extern "C" { //import C functions since C++ supports function overloading and C does not
   //include codec formatt and util opt.h
-#include <ffmpeg-9.0.1/libavcodec/avcodec.h>
-#include <ffmpeg-9.0.1/libavformat/avformat.h>
-#include <ffmpeg-9.0.1/libavutil/imgutils.h>
-#include <ffmpeg-9.0.1/libavutil/opt.h>
+  #include <libavcodec/avcodec.h>
+  #include <libavformat/avformat.h>
+  #include <libavutil/imgutils.h>
+  #include <libavutil/opt.h>
 }
 
 //GRAB IMAGE LIBRARIES 
@@ -101,7 +101,7 @@ void video_compress(const char* input_file, const char* output_file) {
     return;
   }
 
-  avformat_alloc_output_context2(outputFormatContext, nullptr, nullptr, output_file); //allocate the outputFormatContext
+  avformat_alloc_output_context2(&outputFormatContext, nullptr, nullptr, output_file); //allocate the outputFormatContext
   if (!outputFormatContext) {
     return;
   }
@@ -117,8 +117,8 @@ void video_compress(const char* input_file, const char* output_file) {
   codec_context -> width = input_stream->codecpar->width;
   codec_context -> height = input_stream->codecpar->height;
   codec_context -> time_base = input_stream->time_base; //video timestamp
-  codec_context -> pixel_format = AV_PIX_FMT_YUV420P; //very compressible 
-  codec_context -> bitrate = 1000000; //lower target bitrate
+  codec_context -> pix_fmt = AV_PIX_FMT_YUV420P; //very compressible 
+  codec_context -> bit_rate = 1000000; //lower target bitrate
 
   //set encoding speed/compression trade-off profile
   av_opt_set(codec_context->priv_data, "preset", "slow", 0);
@@ -134,11 +134,14 @@ void video_compress(const char* input_file, const char* output_file) {
     avio_open(&outputFormatContext->pb, output_file, AVIO_FLAG_WRITE); //point to pb, our file url path, flags
   }
   avformat_write_header(outputFormatContext, nullptr); //write header file
-  
-  //Write the stream trailer to an output media file and free the file private data.
-  write_trailer(outputFormatContext);
+  if (avformat_write_header(outputFormatContext, nullptr) < 0) {
+    std::cerr << "Error writing format header" << std::endl;
+  }
 
-  std::cout << "MP4 Video has been compressed successfully" << endl;
+  //Write the stream trailer to an output media file and free the file private data.
+  av_write_trailer(outputFormatContext);
+
+  std::cout << "MP4 Video has been compressed successfully" << std::endl;
 
   //free memory ofc
   avcodec_free_context(&codec_context);
@@ -159,16 +162,23 @@ int main() {
   });
   
   eng_server.Post("/compress-image", [](const httplib::Request &req, httplib::Response &res){
-    auto f = req.get_file_value("file");
-    std::ofstream out("uploaded_temp_img"); //filename will be what we define
-    out.write(file.content.c_str(), file.content.size()); 
-    out.close();
+    if (req.has_file("file")) {
+      const auto& file = req.get_file_value("file");
+      std::ofstream out("uploaded_temp_img", std::ios::binary); //filename will be what we define
+      out.write(file.content.c_str(), file.content.size()); 
+      out.close();
 
-    Img_to_JPEG("uploaded_temp_img", "compressed_output.jpg", 50); //50 represents our image quality
+      Img_to_JPEG("uploaded_temp_img", "compressed_output.jpg", 50); //50 represents our image quality
 
-    std::ifstream in("compressed_output.jpg", std::ios::binary);
-    std::string compressed_data((std::istreambuf_iterator<char>(in)), std::isstreambuf_iterator<char>());
-    res.set_content(content, "image/jpeg"); //output shall be jpeg
+      std::ifstream in("compressed_output.jpg", std::ios::binary);
+      std::string compressed_data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+      res.set_content(compressed_data, "image/jpeg"); //output shall be jpeg      
+    }
+    else {
+      res.status = 400;
+      res.set_content("No file uploaded under key 'file'", "text/html");
+    }
+
   });
 
   std::cout << "Server is now running on http://localhost:8080" << std::endl;

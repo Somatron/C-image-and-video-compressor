@@ -7,6 +7,7 @@
     <title>Image & Video Compressor</title>
     <style>
       .center {
+        /*font-family: arial;*/
         display: grid;
         place-items: center;
       }
@@ -25,24 +26,42 @@
 
       <p>Hi please put in whatever image or video file you want to compress</p>
 
-      <p>Compress Image here: 
-        <form>
+      <p><h3>Compress Image here: </h3>
+        <form id="imageForm">
           <div>
-            <input type="file" id="imgfile" name="file" multiple />
-            <button>Submit</button>
+            <input type="file" id="imgfile" name="file" accept="image/*" required />
+            <button type="submit">Compress image</button>
           </div>
         </form>
       </p>
 
-      <p>Compress Video here: 
+      <p><h3>Compress Video here:</h3> 
         <form method="post" enctype="multipart/form-data">
-          <div>
-            <input type="file" id="vidfile" name="file" multiple />
-            <button>Submit</button>
+          <div id="videoForm">
+            <input type="file" id="vidfile" name="file" accept="video/*" required />
+            <button type="submit">Compress video</button>
           </div>
         </form>
       </p>      
     </div>
+
+    <script>
+      document.getElementById('imageForm').addEventListener('submit', async(execute) => {
+        execute.preventDefault()
+        const formData = new formData();
+        formData.append('file', document.getElementById('imageInput').files[0]);
+
+        const response = await fetch('/compress-image', {method: 'POST', body: formData });
+        if (response.ok) {
+          const blob = await response.blob();
+          const downloadUrl = URL.createObjectURL(blob);
+          const newImgLink = document.createElement('a');
+          newImgLink.href = downloadUrl;
+          newImgLink.download = 'compressed.jpg';
+          a.click();
+        }
+      });
+    </script>
 
   </body>
 </html>
