@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Image & Video Compressor</title>
+    <style>
+      .center {
+        display: grid;
+        place-items: center;
+      }
+
+      .proj-title {
+        font-weight: bold;
+        font-size: 30px;
+        padding: 30px;
+      }
+    </style>
+  </head>
+  
+  <body>
+    <div class="center">
+        <div class="proj-title">Image & Video compressor engine in C++ </div>
+
+      <p>Hi please put in whatever image or video file you want to compress</p>
+
+      <p>Compress Image here: 
+        <form>
+          <div>
+            <input type="file" id="file" name="file" multiple />
+            <button>Submit</button>
+          </div>
+        </form>
+      </p>
+
+      <p>Compress Video here: 
+        <form method="post" enctype="multipart/form-data">
+          <div>
+            <input type="file" id="file" name="file" multiple />
+            <button>Submit</button>
+          </div>
+        </form>
+      </p>      
+    </div>
+
+  </body>
+</html>
