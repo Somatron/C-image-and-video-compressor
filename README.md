@@ -17,10 +17,6 @@ I also used https://github.com/richgel999/jpeg-compressor for compressing image 
 
 Most of the project works, except for the video being delayed and slow for the audio lol, heres how the image compression looks like:
 
-# Original:
-<img width="447" height="447" alt="images" src="https://github.com/user-attachments/assets/49d35fe3-72e0-406f-973e-3ff2ce1ad13d" />
-
-#Compressed:
-<img width="447" height="447" alt="compressed_image (2)" src="https://github.com/user-attachments/assets/090ec3cc-02fd-4900-8eac-a9691967b205" />
+!# Original: <img width="447" height="447" alt="images" src="https://github.com/user-attachments/assets/49d35fe3-72e0-406f-973e-3ff2ce1ad13d" />!# Compressed:<img width="447" height="447" alt="compressed_image (2)" src="https://github.com/user-attachments/assets/090ec3cc-02fd-4900-8eac-a9691967b205" />
 
 feel free to use this or whatevr you want to do with it
