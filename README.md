@@ -10,6 +10,7 @@
 Huge Huge Huge thanks to this video for explaining Video Compression step by step, this explains the process of frame encoding/decoding, video compression techniques, and so much more: https://www.youtube.com/watch?v=LDeL7-49qm4 
 
 Check out https://github.com/ffmpeg/ffmpeg I used this library to create audio and video compression, shoutout Fabrice Bellard for creating the whole internet video infrastructure, a lot of this code had me look up a lot of functions and docs on libavformat and libavcodec but i finally finished this at last
+
 Also used Crow https://crowcpp.org/master/ to run C++ code on HTML that was fun and waaaay better than using http::lib originally
 
 I also used https://github.com/richgel999/jpeg-compressor for compressing image files into jpeg
