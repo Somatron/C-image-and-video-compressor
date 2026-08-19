@@ -113,6 +113,17 @@ void video_compress(const char* input_file, const char* output_file) {
   //4. output container and we will use H.264 Encoder for our compression
 
     avformat_alloc_output_context2(&outputFormatContext, nullptr, nullptr, output_file); //allocate the outputFormatContext
+
+    int audioStreamIndex = -1;
+    int outputAudioStreamIndex = -1;
+    //start finding our audio streams
+    for (unsigned int i = 0; i < inputFormatContext -> nb_streams; i++) {
+      if (inputFormatContext -> streams[i] -> codecpar -> codec_type == AVMEDIA_TYPE_AUDIO) { //basically the same for finding our video streams except its audio actually
+        audioStreamIndex = i;
+        break;
+      }
+    }
+
     if (!outputFormatContext) {
       avcodec_free_context(&decoder_context); //fail again
       avformat_close_input(&inputFormatContext);
@@ -125,7 +136,7 @@ void video_compress(const char* input_file, const char* output_file) {
       avformat_close_input(&inputFormatContext); //close memory
       return;
     }
-    AVStream *output_stream = avformat_new_stream(outputFormatContext, encoder); //output our new video stream under the H.264 format since its a better more universally used compression method than H.265
+    AVStream *output_video_stream = avformat_new_stream(outputFormatContext, encoder); //output our new video stream under the H.264 format since its a better more universally used compression method than H.265
     encoder_context = avcodec_alloc_context3(encoder);
     if (!encoder_context) {
       std::cerr << "ERROR cannot allocate memory for encoding/decoding media streams" << std::endl; 
@@ -137,9 +148,11 @@ void video_compress(const char* input_file, const char* output_file) {
     encoder_context -> height = decoder_context->height;
     encoder_context -> time_base = (AVRational){1, 25}; //frame rate basically
     encoder_context -> pix_fmt = AV_PIX_FMT_YUV420P; //very compressible 
-    encoder_context -> bit_rate = 1000000; //lower target bitrate
-    output_stream->time_base = encoder_context->time_base;
+    encoder_context -> bit_rate = 400000; //lower target bitrate
+    output_video_stream->time_base = encoder_context->time_base;
 
+    //crf = constant rate factor, adjust bitrate to based on visual quality instead of fixed to size of the file
+    av_opt_set(encoder_context->priv_data, "crf", "28", 0); //28 is our quality value
     //set encoding speed/compression trade-off profile
     av_opt_set(encoder_context->priv_data, "preset", "slow", 0);
     if (avcodec_open2(encoder_context, encoder, nullptr) < 0) {
@@ -151,7 +164,18 @@ void video_compress(const char* input_file, const char* output_file) {
       return;
     }
 
-    avcodec_parameters_from_context(output_stream->codecpar, encoder_context);
+    avcodec_parameters_from_context(output_video_stream->codecpar, encoder_context);
+
+    //Pass the original audio track into our new compressed file
+    if (audioStreamIndex != -1) {
+      AVStream *in_audio_stream = inputFormatContext -> streams[audioStreamIndex];
+      AVStream *out_audio_stream = avformat_new_stream(outputFormatContext, nullptr);
+      //parameters(target, to copy from)
+      avcodec_parameters_copy(out_audio_stream -> codecpar, in_audio_stream -> codecpar); //a lot of searching online to try to figure out how to move audio from input to compressed file
+      out_audio_stream -> codecpar -> codec_tag = 0;
+      outputAudioStreamIndex = out_audio_stream -> index; //point to audio track, where it is stored
+    }
+
 
     //open output file mapping and write container headers
     if (!(outputFormatContext->oformat->flags & AVFMT_NOFILE)) {
@@ -191,8 +215,8 @@ void video_compress(const char* input_file, const char* output_file) {
             if (avcodec_send_frame(encoder_context, frame) >= 0) {
               while (avcodec_receive_packet(encoder_context, out_packet) >= 0) {
 
-                av_packet_rescale_ts(out_packet, encoder_context->time_base, output_stream->time_base);
-                out_packet->stream_index = output_stream->index; //whenever we have multiple frames the best thing we should do is cut redundencies between each fames, this is where we have different data packets for compressing medias, we move packets from where they need to be compressed
+                av_packet_rescale_ts(out_packet, encoder_context->time_base, output_video_stream->time_base);
+                out_packet->stream_index = output_video_stream->index; //whenever we have multiple frames the best thing we should do is cut redundencies between each fames, this is where we have different data packets for compressing medias, we move packets from where they need to be compressed
 
                 //write compressed video packet to output stream
                 av_interleaved_write_frame(outputFormatContext, out_packet);
@@ -202,7 +226,23 @@ void video_compress(const char* input_file, const char* output_file) {
             }
           }
         }
-      }                           av_packet_unref(in_packet); //free input packet
+      } else if (in_packet -> stream_index == audioStreamIndex && outputAudioStreamIndex != -1) {
+          AVStream *in_audio_stream = inputFormatContext -> streams[audioStreamIndex]; //copying Audio Packets into output
+          AVStream *out_audio_stream = outputFormatContext -> streams[outputAudioStreamIndex];
+
+          //rescaling timestamps for the audio stream, well first we need to make sure they're valid first
+
+          //dts tells us when to decode video frame
+          //pts tells us when to display the decoded frame on screen
+          in_packet -> pts = av_rescale_q_rnd(in_packet -> pts, in_audio_stream->time_base, out_audio_stream -> time_base, (AVRounding)(AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX));
+          in_packet -> dts = av_rescale_q_rnd(in_packet -> dts, in_audio_stream->time_base, out_audio_stream -> time_base, (AVRounding)(AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX));
+          in_packet -> duration = av_rescale_q(in_packet -> duration, in_audio_stream->time_base, out_audio_stream -> time_base); //now we rescale
+          in_packet -> pos = -1;
+          in_packet -> stream_index = outputAudioStreamIndex; //audio packets transition from our original file to compressed file
+
+          av_interleaved_write_frame(outputFormatContext, in_packet); //write audio frame
+      }                        
+      av_packet_unref(in_packet); //free input packet
     }
 
 
@@ -210,9 +250,9 @@ void video_compress(const char* input_file, const char* output_file) {
   //6. Force any data encoder to process and output any remaining frames for compression
     avcodec_send_frame(encoder_context, nullptr);
     while (avcodec_receive_packet(encoder_context, out_packet) >= 0) {
-      av_packet_rescale_ts(out_packet, encoder_context->time_base, output_stream->time_base);
-      out_packet->stream_index = output_stream->index; 
-
+      av_packet_rescale_ts(out_packet, encoder_context->time_base, output_video_stream->time_base);
+      out_packet->stream_index = output_video_stream->index; 
+      
       av_interleaved_write_frame(outputFormatContext, out_packet);
       av_packet_unref(out_packet);
     }
@@ -311,7 +351,6 @@ int main() {
     res.set_header("Content-Type", "video/mp4");
     res.body = compressed_data;
     return res;
-
     
   });
 
