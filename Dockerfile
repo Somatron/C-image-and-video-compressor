@@ -12,15 +12,14 @@ RUN apt-get update && apt-get install -y \
     libavformat-dev \
     libavutil-dev \
     libswscale-dev \
-    libssl-dev \
+    libasio-dev \
     git \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install cpp-httplib headers straight to the system's global search path
-RUN git clone --depth 1 https://github.com/yhirose/cpp-httplib.git /tmp/httplib && \
-    cp /tmp/httplib/httplib.h /usr/local/include/ && \
-    rm -rf /tmp/httplib
+# Download Crow Single Header
+RUN mkdir -p /usr/local/include && \
+    curl -L https://github.com/CrowCpp/Crow/releases/download/v1.0+5/crow_all.h -o /usr/local/include/crow.h
 
 # Download stb image headers for JPEG compression
 RUN mkdir -p /tmp/stb && \
@@ -36,9 +35,9 @@ RUN mkdir -p jpeg-compressor-master && \
     cp /tmp/stb/stb_image.h jpeg-compressor-master/ && \
     cp /tmp/stb/stb_image_write.h jpeg-compressor-master/
 
-# Compile your code natively targeting Linux-compatible runtime behaviors
+# Compile targeting Crow and FFmpeg
 RUN g++ -std=c++17 mainEngine.cpp -o compressor \
-    -lavcodec -lavformat -lavutil -lpthread -lssl -lcrypto
+    -lavcodec -lavformat -lavutil -lpthread
 
 # Step 2: Use a clean runtime layer to keep the final image incredibly lightweight
 FROM ubuntu:22.04
@@ -52,7 +51,6 @@ RUN apt-get update && apt-get install -y \
     libavformat58 \
     libavutil56 \
     libswscale5 \
-    libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

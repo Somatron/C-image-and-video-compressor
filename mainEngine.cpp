@@ -17,7 +17,8 @@ extern "C" { //import C functions since C++ supports function overloading and C 
 #include <fstream>
 #include <string>
 
-#include "httplib.h" //add the html to run c++
+#define CPPHTTPLIB_OPENSSL_SUPPORT
+#include "crow.h" //crow is a flask inspired framework to run c++ on html
 
 //compress input image by adjusting quality
 bool Img_to_JPEG(const std::string& inputPath, const std::string& outputPath, int img_quality) {
@@ -53,8 +54,7 @@ bool Img_to_JPEG(const std::string& inputPath, const std::string& outputPath, in
     std::cerr << "Failed to create Jpeg image DAMN IT!: " << std::endl;
     return false;
   }
-
-  std::cout << "COMPRESSED IMAGE, SAVED INTO: " << outputPath << "\nQuality: " << img_quality << "%\n";
+  
   return true;
 }
 
@@ -65,122 +65,256 @@ void video_compress(const char* input_file, const char* output_file) {
   //AVFormat is a struct btw, structs group variables together, AVFormat handles pointers for input/output, filenames, streams (audio, subtitles, etc), and bit rates
   AVFormatContext* inputFormatContext = nullptr; //point to nothing
   AVFormatContext* outputFormatContext = nullptr;
+  AVCodecContext* encoder_context = nullptr;
+  AVCodecContext* decoder_context = nullptr;
 
-  //open input video file, with inputFormatcontext, and input_file being our URL
-  avformat_open_input(&inputFormatContext, input_file, nullptr, nullptr); //what happens to our inputFormatContext in the avformat_open_input function impacts our variable here too
-  if (avformat_open_input(&inputFormatContext, input_file, nullptr, nullptr) < 0) {
-    return; //make sure function works
-  }
-
-
-  //& kills local scopes
-  avformat_find_stream_info(inputFormatContext, nullptr); //we dont need AVDictionary **options for the 2nd arguement
-  if (avformat_find_stream_info(inputFormatContext, nullptr) < 0) {
-    return;
-  }
-
-  int videoStreamIndex = -1;
-  for (unsigned int i = 0; i < inputFormatContext -> nb_streams; i++) { //unsigned means only positive ints, loop thru all streams
-    if (inputFormatContext -> streams[i] -> codecpar -> codec_type == AVMEDIA_TYPE_VIDEO) {
-      videoStreamIndex = i; //check if media type is a video, which saves current index into the videostream, found the video track needed
-      break;       
+  //1. open input video file, with inputFormatcontext, and input_file being our URL
+  //what happens to our inputFormatContext in the avformat_open_input function impacts our variable here too
+    if (avformat_open_input(&inputFormatContext, input_file, nullptr, nullptr) < 0) {
+      return; //make sure function works
     }
-  }
+    //& kills local scopes
+    if (avformat_find_stream_info(inputFormatContext, nullptr) < 0) {//we dont need AVDictionary **options for the 2nd arguement
+      return;
+    }
 
-  if (videoStreamIndex == -1) {
-    avformat_close_input(&inputFormatContext); //close memory
-    return; //if we still have -1 then we probably didnt find the stream we were looking for
-  }
+  //2. Find the video stream
+    int videoStreamIndex = -1;
+    for (unsigned int i = 0; i < inputFormatContext -> nb_streams; i++) { //unsigned means only positive ints, loop thru all streams
+      if (inputFormatContext -> streams[i] -> codecpar -> codec_type == AVMEDIA_TYPE_VIDEO) {
+        videoStreamIndex = i; //check if media type is a video, which saves current index into the videostream, found the video track needed
+        break;       
+      }
+    }
+    if (videoStreamIndex == -1) {
+      avformat_close_input(&inputFormatContext); //close memory
+      return; //if we still have -1 then we probably didnt find the stream we were looking for
+    }
+    //extract pointers of video stream from our input
+    AVStream *input_stream = inputFormatContext -> streams[videoStreamIndex];
 
-  //extract pointers of video stream from our input
-  AVStream *input_stream = inputFormatContext -> streams[videoStreamIndex];
-  const AVCodec *codec = avcodec_find_encoder(AV_CODEC_ID_H264);
-  if (!codec) {
-    std::cerr << "ERROR encoder is not found" << std::endl; 
-    avformat_close_input(&inputFormatContext); //close memory
-    return;
-  }
 
-  avformat_alloc_output_context2(&outputFormatContext, nullptr, nullptr, output_file); //allocate the outputFormatContext
-  if (!outputFormatContext) {
-    return;
-  }
+  //3. decoder set up
+    const AVCodec *decoder = avcodec_find_decoder(input_stream->codecpar->codec_id);
+    if (!decoder) {
+      std::cerr << "ERROR decoder not found" << std::endl;
+      avformat_close_input(&inputFormatContext);
+      return;
+    }
+    decoder_context = avcodec_alloc_context3(decoder); //create memory to decode first
+    avcodec_parameters_to_context(decoder_context, input_stream->codecpar);
+    if (avcodec_open2(decoder_context, decoder, nullptr) < 0) {
+      avcodec_free_context(&decoder_context); //free memory if we fail
+      avformat_close_input(&inputFormatContext);
+      return;
+    }
 
-  AVStream *output_stream = avformat_new_stream(outputFormatContext, codec); //output our new video stream under the H.264 format since its a better more universally used compression method than H.265
-  AVCodecContext *codec_context = avcodec_alloc_context3(codec);
-  if (!codec_context) {
-    std::cerr << "ERROR cannot allocate memory for encoding/decoding media streams" << std::endl; 
-    return;
-  }
 
-  //begin compression
-  codec_context -> width = input_stream->codecpar->width;
-  codec_context -> height = input_stream->codecpar->height;
-  codec_context -> time_base = input_stream->time_base; //video timestamp
-  codec_context -> pix_fmt = AV_PIX_FMT_YUV420P; //very compressible 
-  codec_context -> bit_rate = 1000000; //lower target bitrate
+  //4. output container and we will use H.264 Encoder for our compression
 
-  //set encoding speed/compression trade-off profile
-  av_opt_set(codec_context->priv_data, "preset", "slow", 0);
-  if (avcodec_open2(codec_context, codec, nullptr) < 0) {
-    std::cerr << "ERROR cannot open video format" << std::endl; 
-    return;
-  }
+    avformat_alloc_output_context2(&outputFormatContext, nullptr, nullptr, output_file); //allocate the outputFormatContext
+    if (!outputFormatContext) {
+      avcodec_free_context(&decoder_context); //fail again
+      avformat_close_input(&inputFormatContext);
+      return;
+    }
 
-  avcodec_parameters_from_context(output_stream->codecpar, codec_context);
+    const AVCodec *encoder = avcodec_find_encoder(AV_CODEC_ID_H264);
+    if (!encoder) {
+      std::cerr << "ERROR encoder not found" << std::endl; 
+      avformat_close_input(&inputFormatContext); //close memory
+      return;
+    }
+    AVStream *output_stream = avformat_new_stream(outputFormatContext, encoder); //output our new video stream under the H.264 format since its a better more universally used compression method than H.265
+    encoder_context = avcodec_alloc_context3(encoder);
+    if (!encoder_context) {
+      std::cerr << "ERROR cannot allocate memory for encoding/decoding media streams" << std::endl; 
+      return;
+    }
 
-  //open output file mapping and write container headers
-  if (!(outputFormatContext->oformat->flags & AVFMT_NOFILE)) {
-    avio_open(&outputFormatContext->pb, output_file, AVIO_FLAG_WRITE); //point to pb, our file url path, flags
-  }
-  if (avformat_write_header(outputFormatContext, nullptr) < 0) {
-    std::cerr << "Error writing format header" << std::endl;
-  }
+    //begin compression
+    encoder_context -> width = decoder_context->width;
+    encoder_context -> height = decoder_context->height;
+    encoder_context -> time_base = (AVRational){1, 25}; //frame rate basically
+    encoder_context -> pix_fmt = AV_PIX_FMT_YUV420P; //very compressible 
+    encoder_context -> bit_rate = 1000000; //lower target bitrate
+    output_stream->time_base = encoder_context->time_base;
 
-  //Write the stream trailer to an output media file and free the file private data.
-  av_write_trailer(outputFormatContext);
+    //set encoding speed/compression trade-off profile
+    av_opt_set(encoder_context->priv_data, "preset", "slow", 0);
+    if (avcodec_open2(encoder_context, encoder, nullptr) < 0) {
+      std::cerr << "ERROR cannot open video format" << std::endl; 
+      avcodec_free_context(&encoder_context); //Free memory of encoder and decoder
+      avcodec_free_context(&decoder_context);
+      avformat_close_input(&inputFormatContext); //close context for inputs and outputs
+      avformat_free_context(outputFormatContext);
+      return;
+    }
 
-  std::cout << "MP4 Video has been compressed successfully" << std::endl;
+    avcodec_parameters_from_context(output_stream->codecpar, encoder_context);
 
-  //free memory ofc
-  avcodec_free_context(&codec_context);
-  avformat_close_input(&inputFormatContext);
-  if (outputFormatContext && !(outputFormatContext->oformat->flags & AVFMT_NOFILE)) {
-    avio_closep(&outputFormatContext->pb);
-  }
-  avformat_free_context(outputFormatContext); 
+    //open output file mapping and write container headers
+    if (!(outputFormatContext->oformat->flags & AVFMT_NOFILE)) {
+      if (avio_open(&outputFormatContext->pb, output_file, AVIO_FLAG_WRITE) < 0) { 
+        avcodec_free_context(&encoder_context); //Free memory of encoder and decoder
+        avcodec_free_context(&decoder_context);
+        avformat_close_input(&inputFormatContext); //close context for inputs and outputs
+        avformat_free_context(outputFormatContext);
+        return;
+      } //point to pb, our file url path, flags
+    }
+
+    if (avformat_write_header(outputFormatContext, nullptr) < 0) {
+          avcodec_free_context(&encoder_context); //Free memory of encoder and decoder
+          avcodec_free_context(&decoder_context);
+          avformat_close_input(&inputFormatContext); //close context for inputs and outputs
+          avformat_free_context(outputFormatContext);
+          return;
+    }
+
+
+
+  //5. Time loop
+    AVPacket* in_packet = av_packet_alloc(); //create memory for input frame, output compressed frame, and overall frame
+    AVFrame* frame = av_frame_alloc();
+    AVPacket* out_packet = av_packet_alloc();
+    int64_t pts_counter = 0;
+    
+    while (av_read_frame(inputFormatContext, in_packet) >= 0) { //count frame by frame
+      if (in_packet->stream_index == videoStreamIndex) { //see if our input packets match the video
+        if (avcodec_send_packet(decoder_context, in_packet) >= 0) {
+          while (avcodec_receive_frame(decoder_context, frame) >= 0) { //send packets to the decoder and have them recieve frame
+
+            frame->pts = pts_counter++; //Prepare frame timestamps for encoding
+
+            //send decoded frame to encoder
+            if (avcodec_send_frame(encoder_context, frame) >= 0) {
+              while (avcodec_receive_packet(encoder_context, out_packet) >= 0) {
+
+                av_packet_rescale_ts(out_packet, encoder_context->time_base, output_stream->time_base);
+                out_packet->stream_index = output_stream->index; //whenever we have multiple frames the best thing we should do is cut redundencies between each fames, this is where we have different data packets for compressing medias, we move packets from where they need to be compressed
+
+                //write compressed video packet to output stream
+                av_interleaved_write_frame(outputFormatContext, out_packet);
+                av_packet_unref(out_packet); //free packet after we write it
+
+              }
+            }
+          }
+        }
+      }                           av_packet_unref(in_packet); //free input packet
+    }
+
+
+
+  //6. Force any data encoder to process and output any remaining frames for compression
+    avcodec_send_frame(encoder_context, nullptr);
+    while (avcodec_receive_packet(encoder_context, out_packet) >= 0) {
+      av_packet_rescale_ts(out_packet, encoder_context->time_base, output_stream->time_base);
+      out_packet->stream_index = output_stream->index; 
+
+      av_interleaved_write_frame(outputFormatContext, out_packet);
+      av_packet_unref(out_packet);
+    }
+
+    //Write the stream trailer to an output media file and free the file private data.
+    av_write_trailer(outputFormatContext);
+    std::cout << "MP4 Video has been compressed successfully" << std::endl;
+
+
+  //7. Free memory
+    av_packet_free(&in_packet);
+    av_frame_free(&frame);
+    av_packet_free(&out_packet);
+
+    avcodec_free_context(&encoder_context); //Free memory for encoders and decoders
+    avcodec_free_context(&decoder_context);
+    avformat_close_input(&inputFormatContext);
+    if (outputFormatContext && !(outputFormatContext->oformat->flags & AVFMT_NOFILE)) {
+      avio_closep(&outputFormatContext->pb);
+    }
+    avformat_free_context(outputFormatContext); 
 }
 
 int main() {
-  httplib::Server eng_server;
+  crow::SimpleApp app;
 
-  eng_server.Get("/", [](const httplib::Request &req, httplib::Response &res){
-    std::ifstream file("img-vid-engine.html");
+  CROW_ROUTE(app, "/")([]() {
+    crow::response res;
+    std::ifstream file("web/img-vid-engine.html");
+    
+    if(file.is_open()) {
+      file.open("img-vid-engine.html");
+    }
+
+    if (!file.is_open()) {
+      res.code = 500;
+      res.body = "Error: HTML interface template missing.";
+      return res;
+    }
+
     std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    res.set_content(content, "text/html"); //use text/html to support images, gifs, videos, etc.
+    res.set_header("Content-Type", "text/html");
+    res.body = content;
+    return res;
   });
-  
-  eng_server.Post("/compress-image", [](const httplib::Request &req, httplib::Response &res){
-    // For multipart form data with cpp-httplib
-    if (req.has_param("file")) {
-      std::string file_data = req.get_param_value("file");
-      std::ofstream out("uploaded_temp_img", std::ios::binary);
-      out.write(file_data.c_str(), file_data.size());
-      out.close();
 
-      Img_to_JPEG("uploaded_temp_img", "compressed_output.jpg", 50);
+  CROW_ROUTE(app, "/compress-image").methods("POST"_method)([](const crow::request& req) {
+    crow::multipart::message file_message(req);
+    auto part = file_message.get_part_by_name("file");
 
-      std::ifstream in("compressed_output.jpg", std::ios::binary);
+    if (part.body.empty()) {
+      return crow::response(400, "Missing 'file' field inside muiltipart data.");
+    }
+    
+    //save uploaded image
+    std::ofstream out("uploaded_img", std::ios::binary);
+    out.write(part.body.c_str(), part.body.size());
+    out.close();
+
+    //compression time
+    if (Img_to_JPEG("uploaded_img", "result_img.jpg", 50)) {
+      std::ifstream in("result_img.jpg", std::ios::binary);
       std::string compressed_data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-      res.set_content(compressed_data, "image/jpeg");
+
+      crow::response res;
+      res.code = 200;
+      res.set_header("Content-Type", "image/jpeg");
+      res.body = compressed_data;
+      return res;
     }
     else {
-      res.status = 400;
-      res.set_content("No file uploaded under key 'file'", "text/html");
+      return crow::response(500, "Image compression failed.");
     }
+
+  });
+
+  CROW_ROUTE(app, "/compress-video").methods("POST"_method)([](const crow::request& req) {
+    crow::multipart::message file_message(req);
+    auto part = file_message.get_part_by_name("file"); //get them from the form
+
+    if (part.body.empty()) {
+      return crow::response(400, "Missing 'file' field inside multipart data.");
+    }
+
+    //save video
+    std::ofstream out("uploaded_video.mp4", std::ios::binary);
+    out.write(part.body.c_str(), part.body.size());
+    out.close();
+
+    video_compress("uploaded_video.mp4", "result_vid_compressed.mp4");
+    std::ifstream in("result_vid_compressed.mp4", std::ios::binary);
+    std::string compressed_data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+    crow::response res;
+    res.code = 200;
+    res.set_header("Content-Type", "video/mp4");
+    res.body = compressed_data;
+    return res;
+
+    
   });
 
   std::cout << "Server is now running on http://localhost:8080" << std::endl;
-  eng_server.listen("0.0.0.0", 8080);
-  return 0;
+  app.port(8080).multithreaded().run();
 }

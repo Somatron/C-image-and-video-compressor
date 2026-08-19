@@ -26,39 +26,90 @@
 
       <p>Hi please put in whatever image or video file you want to compress</p>
 
-      <p><h3>Compress Image here: </h3>
+      <h3>Compress Image here: </h3>
         <form id="imageForm">
           <div>
             <input type="file" id="imgfile" name="file" accept="image/*" required />
             <button type="submit">Compress image</button>
           </div>
         </form>
-      </p>
+      
 
-      <p><h3>Compress Video here:</h3> 
-        <form method="post" enctype="multipart/form-data">
-          <div id="videoForm">
+      <h3>Compress Video here:</h3> 
+        <form id="videoForm">
+          <div>
             <input type="file" id="vidfile" name="file" accept="video/*" required />
             <button type="submit">Compress video</button>
           </div>
-        </form>
-      </p>      
+        </form>     
     </div>
 
     <script>
-      document.getElementById('imageForm').addEventListener('submit', async(execute) => {
-        execute.preventDefault()
-        const formData = new formData();
-        formData.append('file', document.getElementById('imageInput').files[0]);
+      document.getElementById('imageForm').addEventListener('submit', async (execute) => {
+        execute.preventDefault();
+        
+        const fileInput = document.getElementById('imgfile');
+        if (!fileInput.files.length) return;
 
-        const response = await fetch('/compress-image', {method: 'POST', body: formData });
-        if (response.ok) {
-          const blob = await response.blob();
-          const downloadUrl = URL.createObjectURL(blob);
-          const newImgLink = document.createElement('a');
-          newImgLink.href = downloadUrl;
-          newImgLink.download = 'compressed.jpg';
-          a.click();
+        const formData = new FormData();
+        // Key name MUST be 'file' to match req.get_file_value("file")
+        formData.append('file', fileInput.files[0]);
+
+        try {
+          const response = await fetch('/compress-image', {
+            method: 'POST',
+            body: formData // DO NOT ADD headers: { 'Content-Type': '...' }
+          });
+
+          if (response.ok) {
+            const blob = await response.blob(); //create file object
+            const downloadUrl = URL.createObjectURL(blob); //allow browser to download that file
+            const newImgLink = document.createElement('a'); //trigger download file
+            newImgLink.href = downloadUrl; //download the file
+            newImgLink.download = 'compressed_image.jpg'; //file name
+            newImgLink.click(); //activate
+          } else {
+            const errText = await response.text();
+            alert(`Error ${response.status}: ${errText}`);
+          }
+        } catch (err) {
+          console.error(err);
+          alert("Network connection error :( ");
+        }
+      });
+
+      document.getElementById('videoForm').addEventListener('submit', async (execute) => {
+        execute.preventDefault();
+
+        const vidInput = document.getElementById('vidfile');
+        if (!vidInput.files.length) return; //exit if no file selected
+
+        const formData = new FormData(); //new object
+        formData.append('file', vidInput.files[0]);
+
+        try {
+          const response = await fetch('/compress-video', {
+            method: 'POST', //post request
+            body: formData
+          });
+
+          if (response.ok) {
+            const blob = await response.blob();
+            const downloadUrl = URL.createObjectURL(blob);
+            const newVidLink = document.createElement('a');
+            newVidLink.href = downloadUrl;
+            newVidLink.download = 'compressed_video.mp4';
+            document.body.appendChild(newVidLink);
+            newVidLink.click();
+            newVidLink.remove();
+          } else {
+            const errText = await response.text();
+            alert(`Error ${response.status}: ${errText}`);
+          }
+
+        } catch(err) {
+          console.error(err);
+          alert("Network connect error :( ")
         }
       });
     </script>
