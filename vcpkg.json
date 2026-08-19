@@ -1,8 +1,0 @@
-{
-  "name": "image-video-compressor",
-  "version-string": "0.1.0",
-  "dependencies": [
-    "ffmpeg",
-    "cpp-httplib"
-  ]
-}

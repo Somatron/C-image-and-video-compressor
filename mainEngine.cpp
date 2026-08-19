@@ -17,7 +17,7 @@ extern "C" { //import C functions since C++ supports function overloading and C 
 #include <fstream>
 #include <string>
 
-#include "cpp-httplib-master/httplib.h" //add the html to run c++
+#include "httplib.h" //add the html to run c++
 
 //compress input image by adjusting quality
 bool Img_to_JPEG(const std::string& inputPath, const std::string& outputPath, int img_quality) {
@@ -133,7 +133,6 @@ void video_compress(const char* input_file, const char* output_file) {
   if (!(outputFormatContext->oformat->flags & AVFMT_NOFILE)) {
     avio_open(&outputFormatContext->pb, output_file, AVIO_FLAG_WRITE); //point to pb, our file url path, flags
   }
-  avformat_write_header(outputFormatContext, nullptr); //write header file
   if (avformat_write_header(outputFormatContext, nullptr) < 0) {
     std::cerr << "Error writing format header" << std::endl;
   }
@@ -153,7 +152,7 @@ void video_compress(const char* input_file, const char* output_file) {
 }
 
 int main() {
-  httplib:: Server eng_server;
+  httplib::Server eng_server;
 
   eng_server.Get("/", [](const httplib::Request &req, httplib::Response &res){
     std::ifstream file("img-vid-engine.html");
@@ -162,26 +161,26 @@ int main() {
   });
   
   eng_server.Post("/compress-image", [](const httplib::Request &req, httplib::Response &res){
-    if (req.has_file("file")) {
-      const auto& file = req.get_file_value("file");
-      std::ofstream out("uploaded_temp_img", std::ios::binary); //filename will be what we define
-      out.write(file.content.c_str(), file.content.size()); 
+    // For multipart form data with cpp-httplib
+    if (req.has_param("file")) {
+      std::string file_data = req.get_param_value("file");
+      std::ofstream out("uploaded_temp_img", std::ios::binary);
+      out.write(file_data.c_str(), file_data.size());
       out.close();
 
-      Img_to_JPEG("uploaded_temp_img", "compressed_output.jpg", 50); //50 represents our image quality
+      Img_to_JPEG("uploaded_temp_img", "compressed_output.jpg", 50);
 
       std::ifstream in("compressed_output.jpg", std::ios::binary);
       std::string compressed_data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-      res.set_content(compressed_data, "image/jpeg"); //output shall be jpeg      
+      res.set_content(compressed_data, "image/jpeg");
     }
     else {
       res.status = 400;
       res.set_content("No file uploaded under key 'file'", "text/html");
     }
-
   });
 
   std::cout << "Server is now running on http://localhost:8080" << std::endl;
-  eng_server.listen("0.0.0.0", 8080); //run our server after everything is finished
+  eng_server.listen("0.0.0.0", 8080);
   return 0;
 }
