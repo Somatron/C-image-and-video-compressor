@@ -19,8 +19,8 @@ Most of the project works, except for the video being delayed and slow for the a
 
 <table>
   <tr>
-    <td># Original: <img width="447" height="447" alt="images" src="https://github.com/user-attachments/assets/49d35fe3-72e0-406f-973e-3ff2ce1ad13d" /> </td>
-    <td># Compressed: <img width="447" height="447" alt="compressed_image (2)" src="https://github.com/user-attachments/assets/090ec3cc-02fd-4900-8eac-a9691967b205" /></td>
+    <td> <h1> Original: </h1> <img width="447" height="447" alt="images" src="https://github.com/user-attachments/assets/49d35fe3-72e0-406f-973e-3ff2ce1ad13d" /> </td>
+    <td> <h1> Compressed: </h1> <img width="447" height="447" alt="compressed_image (2)" src="https://github.com/user-attachments/assets/090ec3cc-02fd-4900-8eac-a9691967b205" /></td>
   </tr>
 </table>
 
