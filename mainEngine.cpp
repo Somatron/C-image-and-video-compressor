@@ -163,9 +163,10 @@ void video_compress(const char* input_file, const char* output_file) {
       avformat_free_context(outputFormatContext);
       return;
     }
-
+  
     avcodec_parameters_from_context(output_video_stream->codecpar, encoder_context);
 
+  
     //Pass the original audio track into our new compressed file
     if (audioStreamIndex != -1) {
       AVStream *in_audio_stream = inputFormatContext -> streams[audioStreamIndex];
