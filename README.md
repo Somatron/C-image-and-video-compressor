@@ -7,7 +7,7 @@
 
 # Credits:
 
-Huge Huge Huge thanks to Christian Feldmann for making this video that explains Video Coding Compression step by step, this explains the process of frame encoding/decoding, video compression techniques, and so much more: https://www.youtube.com/watch?v=LDeL7-49qm4 
+Huge Huge Huge thanks to Christian Feldmann for this video that explains Video Coding Compression step by step, this explains the process of frame encoding/decoding, video compression techniques, and so much more: https://www.youtube.com/watch?v=LDeL7-49qm4 
 
 Check out https://github.com/ffmpeg/ffmpeg I used this library to create audio and video compression, shoutout Fabrice Bellard for creating the whole internet video infrastructure, a lot of this code had me look up a lot of functions and docs on libavformat and libavcodec but i finally finished this at last
 
